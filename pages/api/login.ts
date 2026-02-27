@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { signJwt } from '../../lib/jwt';
 import { applyCors } from '../../lib/cors';
+import { buildSessionCookie } from '../../lib/sessionCookie';
 
 function badRequest(res: NextApiResponse, message = 'Requisição inválida') {
   return res.status(400).json({ ok: false, error: message });
@@ -12,26 +13,6 @@ function unauthorized(res: NextApiResponse) {
 
 function serverError(res: NextApiResponse, message = 'Erro interno') {
   return res.status(500).json({ ok: false, error: message });
-}
-
-function serializeCookie(
-  name: string,
-  value: string,
-  options: {
-    httpOnly?: boolean;
-    secure?: boolean;
-    path?: string;
-    sameSite?: 'Lax' | 'Strict' | 'None';
-    maxAge?: number; // seconds
-  } = {}
-): string {
-  const parts = [`${name}=${value}`];
-  if (options.path) parts.push(`Path=${options.path}`);
-  if (options.httpOnly) parts.push('HttpOnly');
-  if (options.secure) parts.push('Secure');
-  if (options.sameSite) parts.push(`SameSite=${options.sameSite}`);
-  if (typeof options.maxAge === 'number') parts.push(`Max-Age=${options.maxAge}`);
-  return parts.join('; ');
 }
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -62,30 +43,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
   // Issue JWT and set HttpOnly cookie
   const token = signJwt({ sub: username }, JWT_SECRET, 60 * 60 * 8); // 8h
-  const forwardedProto = Array.isArray(req.headers['x-forwarded-proto'])
-    ? req.headers['x-forwarded-proto'][0]
-    : req.headers['x-forwarded-proto'];
-  const cookieSecureEnv = process.env.COOKIE_SECURE?.toLowerCase();
-  let useSecure: boolean;
-  if (cookieSecureEnv === 'true') {
-    useSecure = true;
-  } else if (cookieSecureEnv === 'false') {
-    useSecure = false;
-  } else if (forwardedProto) {
-    useSecure = forwardedProto === 'https';
-  } else {
-    useSecure = process.env.NODE_ENV === 'production';
-  }
-  if (useSecure && !(forwardedProto === 'https')) {
-    console.warn('[api/login] Secure cookie enabled. Ensure the app is served over HTTPS so the session cookie is kept.');
-  }
-  const cookie = serializeCookie('session', token, {
-    httpOnly: true,
-    secure: useSecure,
-    sameSite: 'Lax',
-    path: '/',
-    maxAge: 60 * 60 * 8,
-  });
+  const cookie = buildSessionCookie(token, req);
   res.setHeader('Set-Cookie', cookie);
   return res.status(200).json({ ok: true });
 }

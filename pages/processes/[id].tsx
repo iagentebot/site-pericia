@@ -68,7 +68,7 @@ const FeesChargedModal: React.FC<{
     }, [onUpdate]);
 
     useEffect(() => {
-        if (!isOpen || !canPersist) return;
+        if (!isOpen || !canPersist || readOnlyMode) return;
         let cancelled = false;
         const fetchProposals = async () => {
             setIsLoading(true);
@@ -115,6 +115,10 @@ const FeesChargedModal: React.FC<{
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!date || !amount) return;
+        if (readOnlyMode) {
+            setApiError('Modo somente leitura.');
+            return;
+        }
 
         setIsSubmitting(true);
         setApiError(null);
@@ -181,6 +185,10 @@ const FeesChargedModal: React.FC<{
     };
     
     const handleRemove = async (id: string) => {
+        if (readOnlyMode) {
+            setApiError('Modo somente leitura.');
+            return;
+        }
         setApiError(null);
         let removalSucceeded = !canPersist;
         if (canPersist) {
@@ -212,17 +220,22 @@ const FeesChargedModal: React.FC<{
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Gerenciar Propostas de Honorarios">
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 pb-6 border-b">
+                {readOnlyMode && (
+                    <div className="md:col-span-3 rounded-2xl border border-amber-400/60 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                        Este card está em modo somente leitura. Administração necessária.
+                    </div>
+                )}
                 <div>
                     <label htmlFor="proposalDate" className="block text-sm font-medium text-gray-700">Data</label>
-                    <input type="date" id="proposalDate" value={date} onChange={e => setDate(e.target.value)} required className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"/>
+                    <input type="date" id="proposalDate" value={date} onChange={e => setDate(e.target.value)} required disabled={readOnlyMode} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"/>
                 </div>
                 <div>
                     <label htmlFor="proposalAmount" className="block text-sm font-medium text-gray-700">Valor (R$)</label>
-                    <input type="number" step="0.01" id="proposalAmount" value={amount} onChange={e => setAmount(e.target.value)} required placeholder="Ex: 5000.00" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"/>
+                    <input type="number" step="0.01" id="proposalAmount" value={amount} onChange={e => setAmount(e.target.value)} required placeholder="Ex: 5000.00" disabled={readOnlyMode} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"/>
                 </div>
                 <div className="self-end flex space-x-2">
-                    <button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 disabled:bg-blue-300">
-                        {editingProposal ? (isSubmitting ? 'Atualizando...' : 'Atualizar') : (isSubmitting ? 'Adicionando...' : 'Adicionar')}
+                    <button type="submit" disabled={isSubmitting || readOnlyMode} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 disabled:bg-blue-300">
+                        {readOnlyMode ? 'Somente leitura' : editingProposal ? (isSubmitting ? 'Atualizando...' : 'Atualizar') : (isSubmitting ? 'Adicionando...' : 'Adicionar')}
                     </button>
                     {editingProposal && <button type="button" onClick={resetForm} className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-md transition duration-300">Cancelar</button>}
                 </div>
@@ -241,8 +254,14 @@ const FeesChargedModal: React.FC<{
                                     <span className="text-green-700 ml-2">{p.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
                                 </div>
                                 <div>
-                                    <button onClick={() => handleEditClick(p)} className="text-blue-500 hover:text-blue-700 font-semibold mr-4">Editar</button>
-                                    <button onClick={() => handleRemove(p.id)} className="text-red-500 hover:text-red-700 font-semibold">Remover</button>
+                                    {!readOnlyMode ? (
+                                        <>
+                                            <button onClick={() => handleEditClick(p)} className="text-blue-500 hover:text-blue-700 font-semibold mr-4">Editar</button>
+                                            <button onClick={() => handleRemove(p.id)} className="text-red-500 hover:text-red-700 font-semibold">Remover</button>
+                                        </>
+                                    ) : (
+                                        <span className="text-xs font-semibold uppercase tracking-wide text-amber-400">Somente leitura</span>
+                                    )}
                                 </div>
                             </li>
                         )) : <p className="text-gray-500">Nenhuma proposta adicionada.</p>}
@@ -260,7 +279,8 @@ const FeesReceivedModal: React.FC<{
     processId?: string;
     payments: Payment[];
     onUpdate: (payments: Payment[]) => void;
-}> = ({ isOpen, onClose, processId, payments, onUpdate }) => {
+    editable?: boolean;
+}> = ({ isOpen, onClose, processId, payments, onUpdate, editable = true }) => {
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [amount, setAmount] = useState('');
     const [taxes, setTaxes] = useState('');
@@ -273,6 +293,7 @@ const FeesReceivedModal: React.FC<{
 
     const canPersist = Boolean(processId && processId !== 'new');
     const latestOnUpdate = useRef(onUpdate);
+    const readOnlyMode = !editable;
 
     useEffect(() => {
         latestOnUpdate.current = onUpdate;
@@ -292,7 +313,7 @@ const FeesReceivedModal: React.FC<{
     }, [amount, taxes]);
 
     useEffect(() => {
-        if (!isOpen || !canPersist) return;
+        if (!isOpen || !canPersist || readOnlyMode) return;
         let cancelled = false;
         const fetchPayments = async () => {
             setIsLoading(true);
@@ -346,6 +367,10 @@ const FeesReceivedModal: React.FC<{
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!date || !amount || !source) return;
+        if (readOnlyMode) {
+            setApiError('Modo somente leitura.');
+            return;
+        }
 
         setIsSubmitting(true);
         setApiError(null);
@@ -422,6 +447,10 @@ const FeesReceivedModal: React.FC<{
     };
     
     const handleRemove = async (id: string) => {
+        if (readOnlyMode) {
+            setApiError('Modo somente leitura.');
+            return;
+        }
         setApiError(null);
         let removalSucceeded = !canPersist;
         if (canPersist) {
@@ -453,21 +482,26 @@ const FeesReceivedModal: React.FC<{
     return (
                 <Modal isOpen={isOpen} onClose={onClose} title="Gerenciar Recebimentos de Honorarios">
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 pb-6 border-b">
+                {readOnlyMode && (
+                    <div className="md:col-span-4 rounded-2xl border border-amber-400/60 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                        Criar ou editar recebimentos está bloqueado porque o usuário está em modo somente leitura.
+                    </div>
+                )}
                 <div>
                     <label htmlFor="paymentDate" className="block text-sm font-medium text-gray-700">Data</label>
-                    <input type="date" id="paymentDate" value={date} onChange={e => setDate(e.target.value)} required className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"/>
+                    <input type="date" id="paymentDate" value={date} onChange={e => setDate(e.target.value)} required disabled={readOnlyMode} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"/>
                 </div>
                 <div className="md:col-span-3">
                     <label htmlFor="paymentSource" className="block text-sm font-medium text-gray-700">Origem / Descricao</label>
-                    <input type="text" id="paymentSource" value={source} onChange={e => setSource(e.target.value)} required placeholder="Ex: Adiantamento" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"/>
+                    <input type="text" id="paymentSource" value={source} onChange={e => setSource(e.target.value)} required placeholder="Ex: Adiantamento" disabled={readOnlyMode} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"/>
                 </div> 
                 <div>
                     <label htmlFor="paymentAmount" className="block text-sm font-medium text-gray-700">Valor Depositado</label>
-                    <input type="number" step="0.01" id="paymentAmount" value={amount} onChange={e => setAmount(e.target.value)} required placeholder="Ex: 2500.00" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"/>
+                    <input type="number" step="0.01" id="paymentAmount" value={amount} onChange={e => setAmount(e.target.value)} required placeholder="Ex: 2500.00" disabled={readOnlyMode} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"/>
                 </div>
                 <div>
                     <label htmlFor="paymentTaxes" className="block text-sm font-medium text-gray-700">Imposto Retido</label>
-                    <input type="number" step="0.01" id="paymentTaxes" value={taxes} onChange={e => setTaxes(e.target.value)} required placeholder="Ex: 250.00" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"/>
+                    <input type="number" step="0.01" id="paymentTaxes" value={taxes} onChange={e => setTaxes(e.target.value)} required placeholder="Ex: 250.00" disabled={readOnlyMode} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"/>
                 </div>
                 <div>
                     <label htmlFor="paymentTotal" className="block text-sm font-medium text-gray-700">Valor Total</label>
@@ -475,7 +509,7 @@ const FeesReceivedModal: React.FC<{
                 </div>
                 
                 <div className="md:col-span-4 self-end flex space-x-2">
-                    <button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 disabled:bg-blue-300">{editingPayment ? (isSubmitting ? 'Atualizando...' : 'Atualizar') : (isSubmitting ? 'Adicionando...' : 'Adicionar')}</button>
+                    <button type="submit" disabled={isSubmitting || readOnlyMode} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 disabled:bg-blue-300">{readOnlyMode ? 'Somente leitura' : editingPayment ? (isSubmitting ? 'Atualizando...' : 'Atualizar') : (isSubmitting ? 'Adicionando...' : 'Adicionar')}</button>
                     {editingPayment && <button type="button" onClick={resetForm} className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-md transition duration-300">Cancelar</button>}
                 </div>
             </form>
@@ -509,9 +543,12 @@ const FeesReceivedModal: React.FC<{
 
 const ProcessDetailPage: React.FC = () => {
     const router = useRouter();
+    const { user } = useAuth();
     const { id } = router.query;
     const [process, setProcess] = useState<JudicialProcess | null>(null);
     const [loading, setLoading] = useState(true);
+    const canEditProcess = Boolean(user?.roles?.some(role => role === 'admin' || role === 'contributor'));
+    const readOnlyMode = !canEditProcess;
     const [isSaving, setIsSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
     const [isFeesChargedModalOpen, setFeesChargedModalOpen] = useState(false);
@@ -593,6 +630,10 @@ const ProcessDetailPage: React.FC = () => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!process) return;
+        if (!canEditProcess) {
+            setSaveError('Modo somente leitura. Entre em contato com um administrador para atualizar o processo.');
+            return;
+        }
 
         setIsSaving(true);
         setSaveError(null);
@@ -639,6 +680,11 @@ const ProcessDetailPage: React.FC = () => {
                             </div>
 
                             <form onSubmit={handleSubmit} className="space-y-8">
+                                {readOnlyMode && (
+                                    <div className="rounded-2xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                                        <strong className="font-semibold">Modo somente leitura:</strong> este usuário não tem permissão para editar. Apenas administradores e editores podem salvar alterações.
+                                    </div>
+                                )}
                                 <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
                                     <div className="space-y-6">
                                         <div>
@@ -650,6 +696,7 @@ const ProcessDetailPage: React.FC = () => {
                                                 value={process.processNumber}
                                                 onChange={handleChange}
                                                 required
+                                                disabled={readOnlyMode}
                                                 className={inputClasses}
                                                 placeholder="5006383-06.2025.8.21.0087"
                                                 maxLength={25}
@@ -664,6 +711,7 @@ const ProcessDetailPage: React.FC = () => {
                                                 value={process.plaintiff}
                                                 onChange={handleChange}
                                                 required
+                                                disabled={readOnlyMode}
                                                 className={inputClasses}
                                             />
                                         </div>
@@ -676,6 +724,7 @@ const ProcessDetailPage: React.FC = () => {
                                                 value={process.defendant}
                                                 onChange={handleChange}
                                                 required
+                                                disabled={readOnlyMode}
                                                 className={inputClasses}
                                             />
                                         </div>
@@ -688,6 +737,7 @@ const ProcessDetailPage: React.FC = () => {
                                                 value={process.city}
                                                 onChange={handleChange}
                                                 required
+                                                disabled={readOnlyMode}
                                                 className={inputClasses}
                                             />
                                         </div>
@@ -698,6 +748,7 @@ const ProcessDetailPage: React.FC = () => {
                                                 id="status"
                                                 value={process.status}
                                                 onChange={handleChange}
+                                                disabled={readOnlyMode}
                                                 className={`${inputClasses} appearance-none pr-10`}
                                             >
                                                 {Object.values(ProcessStatus).map(status => (
@@ -715,6 +766,7 @@ const ProcessDetailPage: React.FC = () => {
                                                     inputMode="numeric"
                                                     value={caseValueInput}
                                                     onChange={handleCaseValueChange}
+                                                    disabled={readOnlyMode}
                                                     className="w-full bg-transparent text-base font-semibold text-white placeholder:text-brand-cyan-100/40 focus:outline-none focus:ring-0"
                                                 />
                                             </div>
@@ -730,6 +782,7 @@ const ProcessDetailPage: React.FC = () => {
                                                 value={process.startDate}
                                                 onChange={handleChange}
                                                 required
+                                                disabled={readOnlyMode}
                                                 className={inputClasses}
                                             />
                                         </div>
@@ -755,6 +808,7 @@ const ProcessDetailPage: React.FC = () => {
                                                                 value={type}
                                                                 checked={active}
                                                                 onChange={handleChange}
+                                                                disabled={readOnlyMode}
                                                                 className="sr-only"
                                                             />
                                                             {type}
@@ -785,6 +839,7 @@ const ProcessDetailPage: React.FC = () => {
                                                                 value={type}
                                                                 checked={active}
                                                                 onChange={handleChange}
+                                                                disabled={readOnlyMode}
                                                                 className="sr-only"
                                                             />
                                                             {type}
@@ -834,7 +889,8 @@ const ProcessDetailPage: React.FC = () => {
                                         rows={4}
                                         value={process.description}
                                         onChange={handleChange}
-                                        className={`${inputClasses} mt-2 min-h-[120px]`}
+                                        readOnly={readOnlyMode}
+                                        className={`${inputClasses} mt-2 min-h-[120px] ${readOnlyMode ? 'cursor-not-allowed' : ''}`}
                                     ></textarea>
                                 </div>
 
@@ -850,13 +906,20 @@ const ProcessDetailPage: React.FC = () => {
                                     >
                                         Cancelar
                                     </button>
-                                    <button
-                                        type="submit"
-                                        disabled={isSaving}
-                                        className="rounded-2xl bg-gradient-to-r from-brand-cyan-500 to-brand-cyan-600 px-8 py-3 text-sm font-semibold uppercase tracking-wide text-white shadow-brand-cyan-900/40 shadow-xl transition hover:from-brand-cyan-400 hover:to-brand-cyan-500 disabled:cursor-not-allowed disabled:opacity-60"
-                                    >
-                                        {isSaving ? 'Salvando...' : 'Salvar Processo'}
-                                    </button>
+                                    {canEditProcess ? (
+                                        <button
+                                            type="submit"
+                                            disabled={isSaving}
+                                            className="rounded-2xl bg-gradient-to-r from-brand-cyan-500 to-brand-cyan-600 px-8 py-3 text-sm font-semibold uppercase tracking-wide text-white shadow-brand-cyan-900/40 shadow-xl transition hover:from-brand-cyan-400 hover:to-brand-cyan-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                        >
+                                            {isSaving ? 'Salvando...' : 'Salvar Processo'}
+                                        </button>
+                                    ) : (
+                                        <div className="flex items-center gap-3 rounded-2xl border border-emerald-400/60 bg-emerald-500/10 px-6 py-3 text-sm font-semibold uppercase tracking-wide text-emerald-200">
+                                            <span className="h-8 w-8 rounded-full bg-emerald-400/90 text-center text-white">OK</span>
+                                            <span className="text-xs uppercase tracking-[0.3em] text-emerald-200/80">Somente leitura</span>
+                                        </div>
+                                    )}
                                 </div>
                             </form>
                         </div>

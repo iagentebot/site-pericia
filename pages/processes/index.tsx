@@ -8,6 +8,7 @@ import { useRouter } from 'next/router';
 import { getProcesses, getProcessPayments } from '../../services/processService';
 import { JudicialProcess, ProcessStatus, Payment, JusticeType, PericiaType } from '../../types';
 import { Combobox } from '../../components/ui/combobox';
+import { useAuth } from '../../context/authContext';
 
 // --- Modal Component ---
 const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; children: ReactNode }> = ({ isOpen, onClose, title, children }) => {
@@ -324,11 +325,15 @@ const ProcessCard: React.FC<{ process: JudicialProcess }> = ({ process }) => (
 
 const ProcessListPage: React.FC = () => {
     const router = useRouter();
+    const { user } = useAuth();
     const [processes, setProcesses] = useState<JudicialProcess[]>([]);
     const [loading, setLoading] = useState(true);
     const [isReportModalOpen, setReportModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<ProcessStatus | 'all'>('all');
+
+    const canManageProcesses = user?.roles.some((role) => role === 'admin' || role === 'contributor');
+    const isReadOnly = user?.roles.includes('readonly');
 
     useEffect(() => {
         const fetchProcesses = async () => {
@@ -410,12 +415,18 @@ const ProcessListPage: React.FC = () => {
                         >
                             Relatório Pagamentos
                         </button>
-                        <Link
-                            href="/processes/new"
-                            className="bg-gradient-to-r from-emerald-400 to-emerald-500 hover:from-emerald-300 hover:to-emerald-400 text-white font-bold py-3 px-5 rounded-2xl transition duration-300 ease-in-out shadow-emerald-900/30 shadow-lg text-center"
-                        >
-                            + Adicionar Processo
-                        </Link>
+                        {canManageProcesses ? (
+                            <Link
+                                href="/processes/new"
+                                className="bg-gradient-to-r from-emerald-400 to-emerald-500 hover:from-emerald-300 hover:to-emerald-400 text-white font-bold py-3 px-5 rounded-2xl transition duration-300 ease-in-out shadow-emerald-900/30 shadow-lg text-center"
+                            >
+                                + Adicionar Processo
+                            </Link>
+                        ) : (
+                            <div className="rounded-2xl border border-dashed border-brand-cyan-500/40 bg-brand-dark-secondary/70 px-5 py-3 text-sm font-semibold text-brand-cyan-100/70">
+                                {isReadOnly ? 'Você está com acesso somente leitura. Peça um admin para liberar escrita.' : 'Peça a um administrador para liberar edição.'}
+                            </div>
+                        )}
                     </div>
                 </div>
                 {filteredProcesses.length ? (

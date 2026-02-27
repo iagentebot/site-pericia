@@ -1,5 +1,6 @@
 import type { GetServerSidePropsContext, GetServerSidePropsResult } from 'next';
 import { verifyJwt } from './jwt';
+import { AuthUser } from '../types';
 
 function parseCookies(cookieHeader?: string | null): Record<string, string> {
   const out: Record<string, string> = {};
@@ -15,14 +16,32 @@ function parseCookies(cookieHeader?: string | null): Record<string, string> {
   return out;
 }
 
-export function isRequestAuthenticated(ctx: GetServerSidePropsContext): boolean {
+interface SessionPayload {
+  user?: AuthUser;
+  sub?: string;
+  iat?: number;
+  exp?: number;
+}
+
+export function getSessionPayloadFromCookie(cookieHeader?: string | null): SessionPayload | null {
   const JWT_SECRET = process.env.JWT_SECRET;
-  if (!JWT_SECRET) return false;
-  const cookies = parseCookies(ctx.req.headers?.cookie || '');
+  if (!JWT_SECRET) return null;
+  const cookies = parseCookies(cookieHeader || '');
   const token = cookies['session'];
-  if (!token) return false;
-  const { valid } = verifyJwt(token, JWT_SECRET);
-  return !!valid;
+  if (!token) return null;
+  const { valid, payload } = verifyJwt(token, JWT_SECRET);
+  if (!valid || !payload) return null;
+  return payload as SessionPayload;
+}
+
+export function getSessionUser(ctx: GetServerSidePropsContext) {
+  const payload = getSessionPayloadFromCookie(ctx.req.headers?.cookie || '');
+  return payload?.user ?? null;
+}
+
+export function isRequestAuthenticated(ctx: GetServerSidePropsContext): boolean {
+  const payload = getSessionPayloadFromCookie(ctx.req.headers?.cookie || '');
+  return !!payload?.user;
 }
 
 export function redirectToLogin<T = any>(ctx: GetServerSidePropsContext): GetServerSidePropsResult<T> {

@@ -1,113 +1,100 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { useAuth } from '../context/authContext';
+import { GoogleLogin, CredentialResponse } from '@react-oauth/google';
 
 const LoginPage: React.FC = () => {
-    const [username, setUsername] = useState('');
-    const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
-    const router = useRouter();
-    const { login } = useAuth();
+  const router = useRouter();
+  const { user, isAuthenticated, login } = useAuth();
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError('');
-        const returnTo = typeof (router.query as any)?.returnTo === 'string' ? (router.query as any).returnTo : '/processes';
-        try {
-            if (!username || !password) {
-                setError('Por favor, preencha usuário e senha.');
-                return;
-            }
-            const res = await fetch('/api/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password }),
-            });
-            if (!res.ok) {
-                const data = await res.json().catch(() => ({} as any));
-                setError((data as any)?.error || 'Falha ao autenticar');
-                return;
-            }
-            login();
-            router.push(returnTo);
-            return;
-        } catch (err) {
-            setError('Erro inesperado. Tente novamente.');
-            return;
-        }
-        // Mock authentication
-        if (username && password) {
-            login();
-            router.push('/processes');
-        } else {
-            setError('Por favor, preencha usuário e senha.');
-        }
-    };
+  const returnTo = typeof router.query.returnTo === 'string' ? router.query.returnTo : '/processes';
+  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
 
-    return (
-        <section id="sobre" className="py-20 bg-brand-dark-secondary">
-            <div className="bg-brand-dark text-brand-light min-h-screen font-sans">
-                <Header />
-                <main className="flex items-center justify-center pt-24 pb-12 px-4 sm:px-6 lg:px-8">
-                    <div className="container mx-auto px-6">
-                        <div className="flex flex-col md:flex-row items-center gap-12">
-                            <div className="md:w-1/2">  
-                                <h2 className="text-3xl font-bold text-white mb-4">
-                                    Acessar o sistema
-                                </h2>
-                                <div className="w-24 h-1 bg-brand-cyan-500 mb-6"></div>
-                            </div>
-                        </div>
-                            <form className="mt-8 space-y-6 " onSubmit={handleSubmit}>
-                                <div className="rounded-md shadow-sm -space-y-px ">
-                                    <div>
-                                        <label htmlFor="username" className="sr-only">Usuário</label>
-                                        <input
-                                            id="username"
-                                            name="username"
-                                            type="text"
-                                            value={username}
-                                            onChange={(e) => setUsername(e.target.value)}
-                                            required
-                                            className="bg-brand-dark-secondary appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-slate-400 text-white rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                                            placeholder="Usuário"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label htmlFor="password" className="sr-only">Senha</label>
-                                        <input
-                                            id="password"
-                                            name="password"
-                                            type="password"
-                                            value={password}
-                                            onChange={(e) => setPassword(e.target.value)}
-                                            required
-                                            className="bg-brand-dark-secondary appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-slate-400 text-white  rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                                            placeholder="Senha"
-                                        />
-                                    </div>
-                                
-                            </div>
-                            {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-                            <div>
-                                <button
-                                    type="submit"
-                                    className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-bold rounded-md text-white bg-brand-cyan-500 hover:bg-brand-cyan-600 transition duration-300 shadow-md focus:outline-none"
-                                    
-                                >
-                                    Entrar
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </main>
-                <Footer />
+  useEffect(() => {
+    if (isAuthenticated && !loading) {
+      router.replace(returnTo);
+    }
+  }, [isAuthenticated, loading, router, returnTo]);
+
+  const handleSuccess = async (response: CredentialResponse) => {
+    setError('');
+    const idToken = response?.credential;
+    if (!idToken) {
+      setError('Não foi possível obter o token do Google.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch('/api/google-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      });
+      const data = await res.json().catch(() => ({} as any));
+      if (!res.ok) {
+        throw new Error(data?.error || 'Falha ao autenticar via Google.');
+      }
+      if (data?.user) {
+        login(data.user);
+        router.push(returnTo);
+      } else {
+        throw new Error('Resposta inesperada do servidor.');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao autenticar.';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleError = () => {
+    setError('Não foi possível completar o login com o Google no momento.');
+  };
+
+  return (
+    <section className="py-20 bg-brand-dark-secondary min-h-screen">
+      <div className="bg-brand-dark text-brand-light min-h-screen font-sans">
+        <Header />
+        <main className="flex flex-col items-center justify-center pt-24 pb-12 px-4 sm:px-6 lg:px-8">
+          <div className="container mx-auto px-6 max-w-3xl">
+            <div className="text-center mb-10">
+              <h2 className="text-4xl font-bold text-white">Bem-vindo de volta!</h2>
+              <p className="mt-2 text-lg text-brand-cyan-200/80">
+                Use um login seguro do Google para acessar o painel da Richter Perícia.
+              </p>
             </div>
-        </section>
-    );
+            <div className="rounded-3xl border border-brand-cyan-500/40 bg-brand-dark-secondary/90 p-8 shadow-2xl shadow-black/30">
+              <p className="text-sm text-brand-cyan-100/70 mb-4">
+                Nosso SaaS entrega acompanhamento completo de perícias judiciais, pagamentos e relatórios para equipes autorizadas.
+              </p>
+              {googleClientId ? (
+                <div className="flex flex-col items-center gap-4">
+                  <GoogleLogin onSuccess={handleSuccess} onError={handleError} useOneTap />
+                  <p className="text-xs text-brand-cyan-100/60 text-center">
+                    O acesso é protegido por sessão e você pode entrar com qualquer conta Google autorizada.
+                  </p>
+                  {loading && <span className="text-sm text-brand-cyan-200">Verificando credenciais...</span>}
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-brand-cyan-500/60 bg-brand-dark/70 p-6 text-sm text-brand-cyan-200">
+                  <p className="font-semibold text-white mb-2">Login via Google não configurado</p>
+                  <p>Defina as variáveis de ambiente <code className="font-mono">NEXT_PUBLIC_GOOGLE_CLIENT_ID</code> e <code className="font-mono">GOOGLE_CLIENT_ID</code> antes de rodar o app.</p>
+                </div>
+              )}
+              {error && <p className="text-sm text-red-400 mt-4 text-center">{error}</p>}
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    </section>
+  );
 };
 
 export default LoginPage;

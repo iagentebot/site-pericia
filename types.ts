@@ -21,6 +21,14 @@ export enum PericiaType {
   DOCUMENTAL = 'Documental',
 }
 
+export type AuthRole = 'admin' | 'contributor' | 'readonly';
+
+export interface AuthUser {
+  email: string;
+  name?: string;
+  picture?: string;
+  roles: AuthRole[];
+}
 
 export interface FeeProposal {
   id: string;
